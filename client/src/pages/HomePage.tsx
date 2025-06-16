@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axiosInstance from "../utils/axiosInstance";
 import { toast } from "react-toastify";
-import { useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate } from "@tanstack/react-router";
 import { studentDetailsRoute } from "../routing/homeRoute";
 
 // Student type
@@ -309,6 +309,7 @@ const handleDownload = async () => {
           </div>
         </div>
       )}
+      <Outlet />
     </div>
   );
 };

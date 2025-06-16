@@ -12,9 +12,7 @@ export const rootRoute = createRootRoute({
 
 export const routeTree = rootRoute.addChildren([
   authRoute,
-  homeRoute.addChildren([
-    studentDetailsRoute,
-  ]),
+  homeRoute,studentDetailsRoute,
 ])
 
 const queryClient = new QueryClient()

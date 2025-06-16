@@ -203,19 +203,21 @@ export const downloadExcel = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// controllers/studentController.js (or wherever you keep it)
 
 async function fetchContestHistory(cfHandle) {
   const resp = await axios.get(
     `https://codeforces.com/api/user.rating?handle=${encodeURIComponent(cfHandle)}`
   );
-  if (resp.data.status !== "OK") throw new Error("Failed to fetch contest history");
-  return resp.data.result.map(c => ({
+  if (resp.data.status !== "OK")
+    throw new Error("Failed to fetch contest history");
+  return resp.data.result.map((c) => ({
     contestId: c.contestId,
     contestName: c.contestName,
     rank: c.rank,
     oldRating: c.oldRating,
     newRating: c.newRating,
-    timestamp: c.ratingUpdateTimeSeconds * 1000
+    timestamp: c.ratingUpdateTimeSeconds * 1000,
   }));
 }
 
@@ -223,107 +225,247 @@ async function fetchAllSubmissions(cfHandle) {
   const resp = await axios.get(
     `https://codeforces.com/api/user.status?handle=${encodeURIComponent(cfHandle)}`
   );
-  if (resp.data.status !== "OK") throw new Error("Failed to fetch submissions");
-  return resp.data.result.map(s => ({
+  if (resp.data.status !== "OK")
+    throw new Error("Failed to fetch submissions");
+  return resp.data.result.map((s) => ({
     problemId: `${s.problem.contestId}-${s.problem.index}`,
     rating: s.problem.rating ?? 0,
     verdict: s.verdict,
-    timestamp: s.creationTimeSeconds * 1000
+    timestamp: s.creationTimeSeconds * 1000,
   }));
 }
 
-// ——— Controller: get full student profile ———
+// export const getStudentProfileSubmissions = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const contestDays = Math.max(0, parseInt(req.query.contestDays) || 365);
+//     const submissionDays = Math.max(0,parseInt(req.query.submissionDays) || 365);
+
+//     const student = await Student.findById(id, "cfHandle name");
+//     if (!student) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Student not found" });
+//     }
+
+//     // fetch both in parallel
+//     const [contests, submissions] = await Promise.all([
+//       fetchContestHistory(student.cfHandle),
+//       fetchAllSubmissions(student.cfHandle),
+//     ]);
+
+//     const now = Date.now();
+//     const contestCutoff = now - contestDays * 24 * 3600 * 1e3;
+//     const submissionCutoff = now - submissionDays * 24 * 3600 * 1e3;
+
+//     const okSubs = submissions.filter(
+//       (s) => s.verdict === "OK" && s.timestamp >= submissionCutoff
+//     );
+
+//     // map contestId → Set of solved problems
+//     const solvedInContestMap = okSubs.reduce((map, s) => {
+//       const [contestIdStr] = s.problemId.split("-");
+//       const cid = Number(contestIdStr);
+//       if (!map.has(cid)) map.set(cid, new Set());
+//       map.get(cid).add(s.problemId);
+//       return map;
+//     }, new Map());
+
+//     const filteredContests = contests
+//       .filter((c) => c.timestamp >= contestCutoff)
+//       .sort((a, b) => a.timestamp - b.timestamp)
+//       .map((c) => ({
+//         ...c,
+//         solvedCount: solvedInContestMap.get(c.contestId)?.size ?? 0,
+//       }));
+
+//     const ratingGraph = filteredContests.map((c) => ({
+//       x: c.timestamp,
+//       y: c.newRating,
+//     }));
+
+//     // ——— Problem Solving Data ———
+//     // All OK submissions within submissionDays:
+//     const recentOK = submissions.filter(
+//       (s) => s.verdict === "OK" && s.timestamp >= submissionCutoff
+//     );
+//     // de‑duplicate by problemId, keeping earliest timestamp
+//     const uniqMap = recentOK.reduce((m, s) => {
+//       if (!m.has(s.problemId) || m.get(s.problemId).timestamp > s.timestamp) {
+//         m.set(s.problemId, s);
+//       }
+//       return m;
+//     }, new Map());
+//     const solved = Array.from(uniqMap.values());
+
+//     const totalSolved = solved.length;
+//     const avgRating = totalSolved
+//       ? solved.reduce((sum, s) => sum + s.rating, 0) / totalSolved
+//       : 0;
+//     const avgPerDay = totalSolved / submissionDays;
+
+//     // buckets
+//     const buckets = {};
+//     solved.forEach((s) => {
+//       const low = Math.floor(s.rating / 100) * 100;
+//       const key = `${low}-${low + 99}`;
+//       buckets[key] = (buckets[key] || 0) + 1;
+//     });
+
+//     // heatmap
+//     const heatMap = {};
+//     solved.forEach((s) => {
+//       const day = new Date(s.timestamp).toISOString().slice(0, 10);
+//       heatMap[day] = (heatMap[day] || 0) + 1;
+//     });
+
+//     // hardest
+//     const hardest = solved.reduce(
+//       (max, s) => (s.rating > (max?.rating ?? -1) ? s : max),
+//       null
+//     );
+
+//     return res.json({
+//       success: true,
+//       profile: {
+//         name: student.name,
+//         cfHandle: student.cfHandle,
+        
+//         problemData: {
+//           filterDays: submissionDays,
+//           totalSolved,
+//           avgRating: Number(avgRating.toFixed(2)),
+//           avgPerDay: Number(avgPerDay.toFixed(2)),
+//           hardestSolved: hardest,
+//           buckets,
+//           heatMap,
+//         },
+//       },
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 
 export const getStudentProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { contestDays = 365, submissionDays = 90 } = req.query;
-    const student = await Student.findById(id, "cfHandle name");
-    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+    const contestDays    = Math.max(0, parseInt(req.query.contestDays)    || 365);
+    const submissionDays = Math.max(0, parseInt(req.query.submissionDays) ||  365);
 
-    // Fetch raw CF data
+    // 1) Load student
+    const student = await Student.findById(id, "cfHandle name");
+    if (!student) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Student not found" });
+    }
+
+    // 2) Fetch your CF contest history + all submissions
     const [contests, submissions] = await Promise.all([
       fetchContestHistory(student.cfHandle),
-      fetchAllSubmissions(student.cfHandle)
+      fetchAllSubmissions  (student.cfHandle),
     ]);
 
-    const now = Date.now();
-    // ——— Contest History Filter & Shape ———
-    const contestCutoff = now - contestDays * 24 * 3600 * 1e3;
+    const now              = Date.now();
+    const contestCutoff    = now - contestDays    * 24*3600*1e3;
+    const submissionCutoff = now - submissionDays * 24*3600*1e3;
+
+    // ——— count solves per contest (all‐time) ———
+    const okSubsAllTime = submissions.filter(s => s.verdict === "OK");
+    const solvedInContestMap = okSubsAllTime.reduce((map, s) => {
+      const [cidStr] = s.problemId.split("-");
+      const cid = Number(cidStr);
+      if (!map.has(cid)) map.set(cid, new Set());
+      map.get(cid).add(s.problemId);
+      return map;
+    }, new Map());
+
+    // ——— build your contest list (filtered by contestDays) ———
     const filteredContests = contests
       .filter(c => c.timestamp >= contestCutoff)
-      .sort((a, b) => a.timestamp - b.timestamp);
+      .sort  ((a,b) => a.timestamp - b.timestamp)
+      .map(c => {
+        const solvedSet = solvedInContestMap.get(c.contestId) || new Set();
+        return {
+          ...c,
+          solvedCount:    solvedSet.size,
+          solvedProblems: Array.from(solvedSet),
+        };
+      });
 
     const ratingGraph = filteredContests.map(c => ({
       x: c.timestamp,
-      y: c.newRating
+      y: c.newRating,
     }));
 
-    // ——— Problem Solving Data Filter & Metrics ———
-    const subCutoff = now - submissionDays * 24 * 3600 * 1e3;
-    // take only ACCEPTED submissions, one per problem
-    const okSubs = submissions
-      .filter(s => s.verdict === "OK" && s.timestamp >= subCutoff)
-      .reduce((map, s) => {
-        if (!map.has(s.problemId) || map.get(s.problemId).timestamp > s.timestamp) {
-          map.set(s.problemId, s);
-        }
-        return map;
-      }, new Map())
-      .values();
+    // ——— problemData (within submissionDays) ———
+    const recentOK = submissions.filter(
+      s => s.verdict === "OK" && s.timestamp >= submissionCutoff
+    );
 
-    const solved = Array.from(okSubs);
+    // Dedupe per problemId (earliest timestamp)
+    const uniqMap = recentOK.reduce((m, s) => {
+      if (!m.has(s.problemId) || m.get(s.problemId).timestamp > s.timestamp) {
+        m.set(s.problemId, s);
+      }
+      return m;
+    }, new Map());
+    const solved = Array.from(uniqMap.values());
+
     const totalSolved = solved.length;
-    const avgRating = totalSolved
-      ? solved.reduce((sum, s) => sum + s.rating, 0) / totalSolved
+    const avgRating   = totalSolved
+      ? solved.reduce((sum,s)=> sum + s.rating,0) / totalSolved
       : 0;
-    const daysSpan = submissionDays;
-    const avgPerDay = totalSolved / daysSpan;
+    const avgPerDay   = totalSolved / submissionDays;
 
-    // bucket by nearest 100-rating
-    const bucketCounts = {};
+    // rating‑buckets
+    const buckets = {};
     solved.forEach(s => {
-      const bucket = `${Math.floor(s.rating / 100) * 100}-${Math.floor(s.rating / 100) * 100 + 99}`;
-      bucketCounts[bucket] = (bucketCounts[bucket] || 0) + 1;
+      const low = Math.floor(s.rating/100)*100;
+      const key = `${low}-${low+99}`;    // ← template literal!
+      buckets[key] = (buckets[key]||0) + 1;
     });
 
-    // heat‑map: count per date string
+    // daily heatmap
     const heatMap = {};
     solved.forEach(s => {
-      const date = new Date(s.timestamp).toISOString().slice(0, 10);
-      heatMap[date] = (heatMap[date] || 0) + 1;
+      const day = new Date(s.timestamp).toISOString().slice(0,10);
+      heatMap[day] = (heatMap[day]||0) + 1;
     });
 
-    // most difficult solved
+    // hardest
     const hardest = solved.reduce(
-      (max, s) => (s.rating > (max?.rating ?? -1) ? s : max),
+      (max, s) => s.rating > (max?.rating||-1) ? s : max,
       null
     );
 
+    // 3) Return everything
     return res.json({
       success: true,
       profile: {
-        name: student.name,
-        cfHandle: student.cfHandle,
+        name:          student.name,
+        cfHandle:      student.cfHandle,
         contestHistory: {
-          filterDays: Number(contestDays),
-          list: filteredContests,
-          ratingGraph
+          filterDays: contestDays,
+          list:       filteredContests,
+          ratingGraph,
         },
         problemData: {
-          filterDays: Number(submissionDays),
+          filterDays:     submissionDays,
           totalSolved,
-          avgRating: Number(avgRating.toFixed(2)),
-          avgPerDay: Number(avgPerDay.toFixed(2)),
-          hardestSolved: hardest,
-          buckets: bucketCounts,
-          heatMap
-        }
-      }
+          avgRating:      Number(avgRating.toFixed(2)),
+          avgPerDay:      Number(avgPerDay.toFixed(2)),
+          hardestSolved:  hardest,
+          buckets,
+          heatMap,
+        },
+      },
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 

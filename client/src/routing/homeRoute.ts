@@ -13,7 +13,7 @@ export const homeRoute = createRoute({
 
 // Child
 export const studentDetailsRoute = createRoute({
-  getParentRoute: () => homeRoute,
-  path: 'student/$id',    // ← no leading slash!
+  getParentRoute: () => rootRoute,
+  path: '/student/$id',    
   component: StudentDetails,
 })
