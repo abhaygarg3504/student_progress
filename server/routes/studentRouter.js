@@ -11,8 +11,7 @@ router.use(protect);
 router.get('/',           getAllStudents);
 router.put('/:id',        updateStudent);
 router.delete('/:id',     deleteStudent);
-router.get("/profile/:id", getStudentProfile);
-// router.get("/profile/submission/:id", getStudentProfileSubmissions) 
+router.get("/profile/:id", getStudentProfile); 
 router.patch('/sync/:id', syncStudentRating);
 router.get('/download/excel', downloadExcel);
 export default router

@@ -1,38 +1,70 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axiosInstance from "../utils/axiosInstance";
 import { studentDetailsRoute } from "../routing/homeRoute";
 import { useParams } from "@tanstack/react-router";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
-  BarChart, Bar, Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Legend,
 } from "recharts";
-import HeatMap from "react-heatmap-grid";
 import CalendarHeatmap from "react-calendar-heatmap";
-import { subDays, format, parseISO } from "date-fns";
+import { subDays, format } from "date-fns";
 import "react-calendar-heatmap/dist/styles.css";
 import { Tooltip as ReactTooltip } from "react-tooltip";
 
-const daysForContest = [
+// Types
+interface Contest {
+  contestId: number;
+  contestName: string;
+  rank: number;
+  oldRating: number;
+  newRating: number;
+  timestamp: string;
+  solvedCount: number;
+}
+interface RatingPoint { x: string; y: number; }
+interface HeatMapValue { date: string; count: number; }
+interface ProfileData {
+  name: string;
+  cfHandle: string;
+  contestHistory: { list: Contest[]; ratingGraph: RatingPoint[] };
+  problemData: {
+    heatMap: Record<string, number>;
+    buckets: Record<string, number>;
+    totalSolved: number;
+    hardestSolved: { problemId: string; rating: number; timestamp: number };
+  };
+}
+
+const daysOptions = [
   { label: "30 days", value: 30 },
   { label: "90 days", value: 90 },
   { label: "365 days", value: 365 },
 ];
-
-const daysForProblemData = [
+const daysOptionsProblem = [
   { label: "7 days", value: 7 },
   { label: "30 days", value: 30 },
-  { label: "95 days", value: 90 },
+  { label: "90 days", value: 90 },
+  { label: "180 days", value: 180 }
 ];
-
-
 const StudentDetails: React.FC = () => {
   const { id } = useParams({ from: studentDetailsRoute.id });
+  const [contestFilter, setContestFilter] = useState<number>(365);
+  const [problemFilter, setProblemFilter] = useState<number>(365);
 
-  const [contestFilter, setContestFilter] = useState(365);
-  const [problemDataFilter, setProblemDataFilter] = useState(90)
-
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data: profile,
+    isLoading,
+    isError,
+  } = useQuery<ProfileData>({
     queryKey: ["student-profile", id],
     queryFn: async () => {
       const res = await axiosInstance.get(`/students/profile/${id}`);
@@ -40,53 +72,141 @@ const StudentDetails: React.FC = () => {
     },
   });
 
-  if (isLoading) return <div>Loading...</div>;
-  if (isError || !data) return <div>Error loading student data.</div>;
+  // Provide defaults so hooks can run unconditionally
+  const contestHistory = profile?.contestHistory ?? { list: [], ratingGraph: [] };
+  const problemData = profile?.problemData ?? {
+    heatMap: {},
+    buckets: {},
+    totalSolved: 0,
+    hardestSolved: { problemId: "", rating: 0, timestamp: 0 },
+  };
 
-  const { name, cfHandle, contestHistory, problemData } = data;
+  // Hooks for derived data (unconditional)
+  const filteredContests = useMemo(() =>
+    contestHistory.list.filter((c: Contest) => {
+      const daysAgo = (Date.now() - new Date(c.timestamp).getTime()) / (1000 * 60 * 60 * 24);
+      return daysAgo <= contestFilter;
+    }),
+    [contestHistory.list, contestFilter]
+  );
 
-  const filteredContests = contestHistory.list;
+  const ratingGraph = useMemo<RatingPoint[]>(() =>
+    contestHistory.ratingGraph
+      .filter((p: RatingPoint) => (Date.now() - new Date(p.x).getTime()) / (1000 * 60 * 60 * 24) <= contestFilter)
+      .map((p: RatingPoint) => ({ x: new Date(p.x).toLocaleDateString(), y: p.y })),
+    [contestHistory.ratingGraph, contestFilter]
+  );
 
-  const ratingGraph = contestHistory.ratingGraph.map((point: { x: number; y: number }) => ({
-    x: new Date(point.x).toLocaleDateString(),
-    y: point.y,
-  }));
-
-  const barData = Object.entries(problemData.buckets).map(
-  ([range, count]) => ({
-    range,      // e.g. "1200‑1299"
-    count,      // e.g. 75
-  })
-);
- const today = new Date();
-  const start = subDays(today, problemData.filterDays);
-
-  // build full year of data
+  const today = new Date();
+  const problemStart = subDays(today, problemFilter);
   const allDates: Record<string, number> = {};
-  for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(problemStart); d <= today; d.setDate(d.getDate() + 1)) {
     const key = format(d, "yyyy-MM-dd");
     allDates[key] = problemData.heatMap[key] || 0;
   }
-  const fullValues = Object.entries(allDates).map(([date, count]) => ({ date, count }));
+  const fullValues: HeatMapValue[] = Object.entries(allDates).map(([date, count]) => ({ date, count }));
 
+  const barData = useMemo<{ range: string; count: number }[]>(() =>
+    Object.entries(problemData.buckets).map(([range, count]) => ({ range, count })),
+    [problemData.buckets]
+  );
+
+  // Loading/Error states
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-64">Loading...</div>;
+  }
+  if (isError || !profile) {
+    return <div className="text-center py-10 text-red-600">Error loading student data.</div>;
+  }
+
+  // Destructure after loading
+  const { name, cfHandle } = profile;
+  const total = problemData.totalSolved;
+  const { problemId: hardProblemId, rating: hardProblemRating, timestamp } = problemData.hardestSolved;
+  const solvedDate = new Date(timestamp).toLocaleDateString();
 
   return (
-    <div className="p-4 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-2">{name}</h1>
-      <p className="mb-4 text-gray-600">
-        Codeforces Handle: <strong>{cfHandle}</strong>
-      </p>
+    <div className="px-4 py-6 max-w-7xl mx-auto space-y-8">
+      {/* Header */}
+      <header className="text-center">
+        <h1 className="text-4xl font-extrabold mb-1 text-gray-800">{name}</h1>
+        <p className="text-gray-500">Codeforces Handle: <span className="font-medium text-blue-600">{cfHandle}</span></p>
+      </header>
 
-      {/* Contest History Section */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-2">Contest Rating Graph</h2>
-        <div className="mb-2">
-          {daysForContest.map((opt) => (
+      {/* Contest Section */}
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-gray-700">Contest Rating & Performance</h2>
+        <div className="flex flex-wrap justify-center gap-2">
+          {daysOptions.map(opt => (
             <button
               key={opt.value}
               onClick={() => setContestFilter(opt.value)}
-              className={`px-3 py-1 mr-2 rounded border ${
-                contestFilter === opt.value ? "bg-blue-500 text-white" : "bg-white text-black"
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-shadow focus:outline-none ${
+                contestFilter === opt.value
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "bg-gray-100 text-gray-700 hover:shadow"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="bg-white p-4 rounded-2xl shadow-inner">
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={ratingGraph} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="x" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="y" stroke="#3b82f6" strokeWidth={3} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white shadow-lg rounded-lg overflow-hidden">
+            <thead className="bg-gray-50">
+              <tr>
+                {[
+                  "Contest",
+                  "Rank",
+                  "Old Rating",
+                  "New Rating",
+                  "Date",
+                  "Solved",
+                ].map(header => (
+                  <th key={header} className="px-4 py-3 text-left text-sm font-medium text-gray-600">{header}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredContests.map(contest => (
+                <tr key={contest.contestId} className="border-t hover:bg-gray-50">
+                  <td className="px-4 py-2 text-sm text-gray-700">{contest.contestName}</td>
+                  <td className="px-4 py-2 text-sm">{contest.rank}</td>
+                  <td className="px-4 py-2 text-sm">{contest.oldRating}</td>
+                  <td className="px-4 py-2 text-sm">{contest.newRating}</td>
+                  <td className="px-4 py-2 text-sm">{new Date(contest.timestamp).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-sm">{contest.solvedCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Problem Section */}
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-gray-700">Problem Solving Metrics</h2>
+        <div className="flex flex-wrap justify-center gap-2">
+          {daysOptionsProblem.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setProblemFilter(opt.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-shadow focus:outline-none ${
+                problemFilter === opt.value
+                  ? "bg-green-600 text-white shadow-lg"
+                  : "bg-gray-100 text-gray-700 hover:shadow"
               }`}
             >
               {opt.label}
@@ -94,91 +214,51 @@ const StudentDetails: React.FC = () => {
           ))}
         </div>
 
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={ratingGraph}>
-            <XAxis dataKey="x" />
-            <YAxis />
-            <Tooltip />
-            <CartesianGrid stroke="#ccc" />
-            <Line type="monotone" dataKey="y" stroke="#8884d8" />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Bar Chart */}
+          <div className="bg-white p-4 rounded-2xl shadow-inner">
+            <h3 className="text-xl font-medium mb-2 text-gray-600">Difficulty Distribution</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="range" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="count" barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
-        <h2 className="text-xl font-semibold mt-6 mb-2">Contest Performances</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 border">Contest</th>
-                <th className="px-4 py-2 border">Rank</th>
-                <th className="px-4 py-2 border">Old Rating</th>
-                <th className="px-4 py-2 border">New Rating</th>
-                <th className="px-4 py-2 border">Date</th>
-                 <th className="px-4 py-2 border">Solved Till Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContests.map((contest: any) => (
-                <tr key={contest.contestId}>
-                  <td className="border px-4 py-2">{contest.contestName}</td>
-                  <td className="border px-4 py-2">{contest.rank}</td>
-                  <td className="border px-4 py-2">{contest.oldRating}</td>
-                  <td className="border px-4 py-2">{contest.newRating}</td>
-                  <td className="border px-4 py-2">
-                    {new Date(contest.timestamp).toLocaleDateString()}
-                  </td>
-                  <td className="border px-4 py-2">
-                    {contest.solvedCount}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Heatmap */}
+          <div className="bg-white p-4 rounded-2xl shadow-inner">
+            <h3 className="text-xl font-medium mb-2 text-gray-600">Activity Heatmap</h3>
+            <div className="overflow-x-auto">
+              <CalendarHeatmap
+                startDate={problemStart}
+                endDate={today}
+                values={fullValues}
+                classForValue={(value: HeatMapValue) => {
+                  if (!value || value.count === 0) return "color-empty";
+                  if (value.count >= 6) return "color-scale-4";
+                  if (value.count >= 4) return "color-scale-3";
+                  if (value.count >= 2) return "color-scale-2";
+                  return "color-scale-1";
+                }}
+                tooltipDataAttrs={(value: HeatMapValue) => ({
+                  "data-tip": `${value.date}: ${value.count} solved`,
+                })}
+              />
+              <ReactTooltip />
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Problem Solving Data */}
-      <div>
-        <ResponsiveContainer width="100%" height={300}>
-  <BarChart data={barData}>
-    <CartesianGrid strokeDasharray="3 3" />
-    <XAxis dataKey="range" />
-    <YAxis />
-    <Tooltip />
-    <Legend />
-    <Bar dataKey="count" fill="#8884d8" />
-  </BarChart>
-</ResponsiveContainer>
-      </div>
-    <div className="mt-8">
-  <h2 className="text-xl font-semibold mb-2">Problem Solving Heatmap</h2>
-  <div className="overflow-x-auto bg-white rounded-lg shadow p-4">
-   
-    <section className="mt-8">
-        <h2 className="text-xl font-semibold mb-4">Problem Solving Heatmap</h2>
-        <div className="overflow-x-auto bg-white rounded-lg shadow p-4">
-          <CalendarHeatmap
-            startDate={start}
-            endDate={today}
-            values={fullValues}
-            weekdayLabels={["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]}
-            tooltipDataAttrs={(value:any) => ({
-              "data-tip": `${value.date}: ${value.count} problem${value.count === 1 ? "" : "s"}`,
-            })}
-            classForValue={(value:any) => {
-              if (!value || value.count === 0) return "color-empty";
-              if (value.count >= 6) return "color-scale-4";
-              if (value.count >= 4) return "color-scale-3";
-              if (value.count >= 2) return "color-scale-2";
-              return "color-scale-1";
-            }}
-          />
-          <ReactTooltip />
+        <div className="bg-white p-4 rounded-2xl shadow-inner text-center">
+          <h3 className="text-lg font-medium text-gray-700">Total Problems Solved: <span className="text-blue-600">{total}</span></h3>
+          <p className="text-sm text-gray-500 mt-1">Hardest Problem Solved: <span className="font-medium">{hardProblemId}</span> ({hardProblemRating}) on {solvedDate}</p>
         </div>
       </section>
-  </div>
-</div>
-      
     </div>
   );
 };
