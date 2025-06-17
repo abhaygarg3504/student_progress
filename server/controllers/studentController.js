@@ -234,8 +234,6 @@ async function fetchAllSubmissions(cfHandle) {
   }));
 }
 
-
-
 export const getStudentProfile = async (req, res) => {
   try {
     const { id } = req.params;
@@ -255,14 +253,14 @@ export const getStudentProfile = async (req, res) => {
       fetchContestHistory(student.cfHandle),
       fetchAllSubmissions  (student.cfHandle),
     ]);
-    const subs = await fetchAllSubmissions(student.cfHandle);
+  //   const subs = await fetchAllSubmissions(student.cfHandle);
 
-  // Filter only accepted submissions
-  const solvedSubs = subs.filter((s) => s.verdict === "OK");
+  // // Filter only accepted submissions
+  // const solvedSubs = subs.filter((s) => s.verdict === "OK");
 
-  // Use a Set to dedupe problem IDs
-  const solvedSet = new Set(solvedSubs.map((s) => s.problemId));
-  const total = solvedSet.size
+  // // Use a Set to dedupe problem IDs
+  // const solvedSet = new Set(solvedSubs.map((s) => s.problemId));
+  // const total = solvedSet.size
 
     const now              = Date.now();
     const contestCutoff    = now - contestDays    * 24*3600*1e3;
@@ -310,19 +308,26 @@ export const getStudentProfile = async (req, res) => {
     }, new Map());
     const solved = Array.from(uniqMap.values());
 
-    const totalSolved = solved.length;
-    const avgRating   = totalSolved
-      ? solved.reduce((sum,s)=> sum + s.rating,0) / totalSolved
-      : 0;
-    const avgPerDay   = totalSolved / submissionDays;
+     const totalSolved = solved.length;
+ const avgRating   = totalSolved
+   ? solved.reduce((sum, s) => sum + s.rating, 0) / totalSolved
+   : 0;
+ const avgPerDay   = totalSolved / submissionDays;
 
     // rating‑buckets
-    const buckets = {};
-    solved.forEach(s => {
-      const low = Math.floor(s.rating/100)*100;
-      const key = `${low}-${low+99}`;    // ← template literal!
-      buckets[key] = (buckets[key]||0) + 1;
-    });
+//     const buckets = {};
+//  solved.forEach(s => {
+//    const low = Math.floor(s.rating/100)*100;
+//    const key = `${low}-${low+99}`;
+//    buckets[key] = (buckets[key]||0) + 1;
+//  });
+ // rating‑buckets
+  const buckets = solved.reduce((b, s) => {
+    const low = Math.floor(s.rating / 100) * 100;
+    const key = `${low}-${low + 99}`;
+    b[key] = (b[key] || 0) + 1;
+    return b;
+  }, {});
 
     // daily heatmap
     const heatMap = {};
