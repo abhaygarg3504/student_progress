@@ -80,9 +80,12 @@ const StudentDetails: React.FC = () => {
   const filteredContests = contests.filter(
     (c) => (now - c.timestamp) / 86400000 <= contestFilter
   );
-  const filteredGraph = ratingGraph.filter(
-    (p) => (now - p.x) / 86400000 <= contestFilter
-  );
+  const filteredGraph = contestHistory.ratingGraph
+  .filter(p => (now - p.x) / 86400000 <= contestFilter)
+  .map(p => ({
+    x: new Date(p.x).toLocaleDateString(),   // e.g. "6/17/2025"
+    y: p.y,
+  }));
 
 
   const today = new Date();
@@ -130,15 +133,37 @@ const StudentDetails: React.FC = () => {
           ))}
         </div>
         <div className="bg-white p-4 rounded-2xl shadow-inner">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={filteredGraph} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
-              <XAxis dataKey="x" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="y" stroke="#3b82f6" strokeWidth={3} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+         <ResponsiveContainer width="100%" height={300}>
+  <LineChart
+    data={filteredGraph}
+    margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+  >
+    <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+
+    {/* format the ticks into local date-strings */}
+    <XAxis
+      dataKey="x"
+      tick={{ fontSize: 12 }}
+      tickFormatter={(ts: number) => new Date(ts).toLocaleDateString()}
+    />
+
+    <YAxis tick={{ fontSize: 12 }} />
+
+    {/* format the tooltip label */}
+    <Tooltip
+      labelFormatter={(ts: number) => new Date(ts).toLocaleDateString()}
+    />
+
+    <Line
+      type="monotone"
+      dataKey="y"
+      stroke="#3b82f6"
+      strokeWidth={3}
+      dot={false}
+    />
+  </LineChart>
+</ResponsiveContainer>
+
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full bg-white shadow-lg rounded-lg overflow-hidden">

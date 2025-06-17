@@ -9,7 +9,10 @@ let task = cron.schedule(currentExpression, syncAllStudentsAndSendReminders, {
   scheduled: true
 })
 export async function syncAllStudentsAndSendReminders() {
-  const cutoff = Date.now() - process.env.REMINDER_DAYS * 24*3600*1000;
+  console.log(`[${new Date().toISOString()}] ▶️ Starting CF‐sync for all students`);
+   const cutoff = Date.now() - process.env.REMINDER_DAYS * 24*3600*1000;
+   console.log(`[${new Date().toISOString()}] ✅ Finished CF‐sync for all students`);
+
 
   const students = await Student.find({});
   for (const s of students) {
@@ -36,8 +39,7 @@ export async function syncAllStudentsAndSendReminders() {
       s.reminderCount++;
     }
     console.log("[cron] syncAllStudentsAndSendReminders fired at", new Date().toISOString());
-  
-
+    
     await s.save();
   }
 }
