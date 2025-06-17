@@ -53,18 +53,14 @@ const daysOptionsProblem = [
 ];
 
 const StudentDetails: React.FC = () => {
-  // const { id } = useParams<{ id: string }>({ from: studentDetailsRoute.id });
-    const { id } = useParams({ from: studentDetailsRoute.id });
+  const { id } = useParams({ from: studentDetailsRoute.id });
   const [contestFilter, setContestFilter] = useState<number>(365);
-  const [problemFilter, setProblemFilter] = useState<number>(30);
+  const [problemFilter, setProblemFilter] = useState<number>(365);
 
-  // Fetch profile based on problemFilter
   const { data: profile, isLoading, isError } = useQuery<ProfileData, Error>({
     queryKey: ["student-profile", id, problemFilter],
     queryFn: async () => {
-      const res = await axiosInstance.get(
-        `/students/profile/${id}?submissionDays=${problemFilter}`
-      );
+      const res = await axiosInstance.get(`/students/profile/${id}?submissionDays=${problemFilter}`);
       return res.data.profile as ProfileData;
     },
   });
@@ -76,12 +72,10 @@ const StudentDetails: React.FC = () => {
     return <div className="text-center py-10 text-red-600">Error loading student data.</div>;
   }
 
-  // Now profile is ProfileData
   const { name, cfHandle, contestHistory, problemData } = profile;
   const { list: contests, ratingGraph } = contestHistory;
   const { heatMap, buckets, totalSolved, avgRating, avgPerDay, hardestSolved } = problemData;
 
-  // Filter contests and rating graph
   const now = Date.now();
   const filteredContests = contests.filter(
     (c) => (now - c.timestamp) / 86400000 <= contestFilter
@@ -90,7 +84,7 @@ const StudentDetails: React.FC = () => {
     (p) => (now - p.x) / 86400000 <= contestFilter
   );
 
-  // Build heatmap values between startDate and today
+
   const today = new Date();
   const startDate = subDays(today, problemFilter);
   const allDates: Record<string, number> = {};

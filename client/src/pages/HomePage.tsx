@@ -4,8 +4,8 @@ import axiosInstance from "../utils/axiosInstance";
 import { toast } from "react-toastify";
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { studentDetailsRoute } from "../routing/homeRoute";
+import { format, isValid } from "date-fns";
 
-// Student type
 interface Student {
   _id: string;
   name: string;
@@ -14,25 +14,52 @@ interface Student {
   cfHandle: string;
   currentRating: number;
   maxRating: number;
+  lastSync: string;         
+  reminderCount: number;
+  remindersDisabled: boolean;
 }
 
-// Add/Edit form initial state
 const initialForm = {
   name: "",
   email: "",
   phone: "",
   cfHandle: "",
-  password: "", // Only used for add
+  password: "", 
 };
 
 const HomePage: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate()
 
-  // Modal state
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(initialForm);
+  const [cronExpr, setCronExpr] = useState("");
+
+  const scheduleMutation = useMutation({
+    mutationFn: (expr: string) =>
+      axiosInstance.patch("/students/schedule", { schedule: expr }),
+    onSuccess: () => {
+      toast.success("Sync schedule updated");
+      setCronExpr("");
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to update schedule"),
+  });
+
+  const handleSchedule = () => {
+    if (!cronExpr.trim()) return toast.error("Please enter a cron expression");
+    scheduleMutation.mutate(cronExpr);
+  };
+  const options: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+};
+
 
   // Fetch all students
   const { data, isLoading } = useQuery({
@@ -149,6 +176,24 @@ const handleDownload = async () => {
     }
   };
 
+  const disableMutation = useMutation({
+  mutationFn: async ({ id, disabled }: { id: string, disabled: boolean }) => {
+    const res = await axiosInstance.patch(`/students/email-disable/${id}`, { remindersDisabled: disabled });
+    if (!res.data.success) throw new Error(res.data.message);
+    return res.data;
+  },
+  onSuccess: (_, { id }) => {
+    queryClient.invalidateQueries({ queryKey: ["students"] });
+    toast.success("Reminder setting updated");
+  },
+  onError: err => toast.error(err.message),
+});
+
+const toggleReminders = (id: string, disable: boolean) => {
+  disableMutation.mutate({ id, disabled: disable });
+};
+
+
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
@@ -178,6 +223,9 @@ const handleDownload = async () => {
                 <th className="p-2 border">Current Rating</th>
                 <th className="p-2 border">Max Rating</th>
                 <th className="p-2 border">Actions</th>
+                <th className="p-2 border">Last Updated</th>
+<th className="p-2 border">Reminders Sent</th>
+<th className="p-2 border">Reminders Enabled?</th>
               </tr>
             </thead>
             <tbody>
@@ -214,6 +262,19 @@ const handleDownload = async () => {
   View More
 </button>
   </td>
+     <td className="p-2 border">
+  {isValid(new Date(student.lastSync))
+     ? format(new Date(student.lastSync), "dd MMM yyyy, hh:mm:ss a")
+     : "-"}
+</td>
+    <td className="p-2 border">{student.reminderCount }</td>
+    <td className="p-2 border">
+      <input
+        type="checkbox"
+        checked={!student.remindersDisabled}
+        onChange={() => toggleReminders(student._id, !student.remindersDisabled)}
+      />
+    </td>
 </tr>
 
               ))}
@@ -305,6 +366,24 @@ const handleDownload = async () => {
                     : "Add"}
                 </button>
               </div>
+              {/* Cron‐schedule updater */}
+      <div className="mb-6 flex items-center gap-2">
+        <label className="font-medium">Daily Sync Cron:</label>
+        <input
+          type="text"
+          className="input border"
+          placeholder="e.g. 0 2 * * *"
+          value={cronExpr}
+          onChange={(e) => setCronExpr(e.target.value)}
+        />
+        <button
+          className="bg-indigo-600 text-white px-4 py-2 rounded"
+          onClick={handleSchedule}
+          disabled={scheduleMutation.isPending}
+        >
+          {scheduleMutation.isPending ? "Updating…" : "Update Schedule"}
+        </button>
+      </div>
             </form>
           </div>
         </div>

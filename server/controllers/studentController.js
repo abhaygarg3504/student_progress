@@ -3,8 +3,10 @@ import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken.js";
 import axios from 'axios';
 import XLSX from "xlsx";
+import { setSyncSchedule } from "../cron/syncAndRemnd.js";
+import cron from "node-cron"
 
-async function fetchCodeforcesRatings(cfHandle) {
+export async function fetchCodeforcesRatings(cfHandle) {
   try {
     const resp = await axios.get(
       `https://codeforces.com/api/user.info?handles=${encodeURIComponent(cfHandle)}`
@@ -204,7 +206,7 @@ export const downloadExcel = async (req, res) => {
   }
 };
 
-async function fetchContestHistory(cfHandle) {
+export async function fetchContestHistory(cfHandle) {
   const resp = await axios.get(
     `https://codeforces.com/api/user.rating?handle=${encodeURIComponent(cfHandle)}`
   );
@@ -220,7 +222,7 @@ async function fetchContestHistory(cfHandle) {
   }));
 }
 
-async function fetchAllSubmissions(cfHandle) {
+export async function fetchAllSubmissions(cfHandle) {
   const resp = await axios.get(
     `https://codeforces.com/api/user.status?handle=${encodeURIComponent(cfHandle)}`
   );
@@ -370,3 +372,22 @@ export const getStudentProfile = async (req, res) => {
   }
 };
 
+export const setReminderFlag = async (req,res) => {
+  const { remindersDisabled } = req.body;
+  const st = await Student.findByIdAndUpdate(
+    req.params.id,
+    { remindersDisabled },
+    { new: true }
+  );
+  res.json({ success: true, student: st });
+};
+
+export const syncSchedule = async(req, res) => {
+   const { schedule } = req.body;      // e.g. "0 3 * * *"
+  if (!cron.validate(schedule)) {
+    return res.status(400).json({ success: false, message: 'Invalid cron expression' });
+  }
+
+  const applied = setSyncSchedule(schedule);
+  res.json({ success: true, schedule: applied });
+}
