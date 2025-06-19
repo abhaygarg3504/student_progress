@@ -366,24 +366,7 @@ const toggleReminders = (id: string, disable: boolean) => {
                     : "Add"}
                 </button>
               </div>
-              {/* Cron‐schedule updater */}
-      <div className="mb-6 flex items-center gap-2">
-        <label className="font-medium">Daily Sync Cron:</label>
-        <input
-          type="text"
-          className="input border"
-          placeholder="e.g. 0 2 * * *"
-          value={cronExpr}
-          onChange={(e) => setCronExpr(e.target.value)}
-        />
-        <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded"
-          onClick={handleSchedule}
-          disabled={scheduleMutation.isPending}
-        >
-          {scheduleMutation.isPending ? "Updating…" : "Update Schedule"}
-        </button>
-      </div>
+             
             </form>
           </div>
         </div>
